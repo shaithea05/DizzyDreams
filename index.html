@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dizzy Dreams</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root { box-sizing: border-box; --navy: #3a2a5c; --lav: #cdb4db; --pink-l: #ffc8dd; --pink: #ffafcc; --blue-l: #bde0fe; --blue: #a2d2ff; --font: "Press Start 2P", "Courier New", monospace; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); color: var(--navy); font-family: var(--font); }
+#app { position: relative; width: 100%; height: 100%; }
+#three { width: 100%; height: 100%; display: block; }
+.outline { color: #fff; text-shadow: 3px 0 0 var(--navy), -3px 0 0 var(--navy), 0 3px 0 var(--navy), 0 -3px 0 var(--navy), 3px 3px 0 var(--navy), -3px 3px 0 var(--navy), 3px -3px 0 var(--navy), -3px -3px 0 var(--navy), 0 6px 0 var(--navy), 3px 6px 0 var(--navy), -3px 6px 0 var(--navy); }
+#hud { position: absolute; z-index: 5; top: 14px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+#hearts { display: flex; gap: 6px; }
+#hearts svg { width: 40px; height: 36px; shape-rendering: crispEdges; filter: drop-shadow(0 4px 0 rgba(58,42,92,.35)); }
+#walk { font-size: 13px; text-transform: uppercase; background: var(--pink-l); padding: 12px 14px; border: 4px solid var(--navy); box-shadow: 4px 4px 0 var(--navy); }
+#hudr { display: flex; gap: 10px; align-items: stretch; pointer-events: auto; }
+.hbtn { font-family: var(--font); font-size: 16px; width: 48px; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--blue-l); color: var(--navy); border: 4px solid var(--navy); box-shadow: 4px 4px 0 var(--navy); cursor: pointer; }
+.hbtn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--navy); }
+.hbtn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.hbtn:disabled { opacity: 0.4; cursor: default; }
+#phone { position: absolute; bottom: 16px; left: 50%; width: min(440px, 78vw); transform: translateX(-50%) perspective(700px) rotateX(12deg); transform-origin: 50% 100%; background: var(--lav); border: 4px solid var(--navy); padding: 10px; box-shadow: 6px 6px 0 var(--navy); }
+#phone canvas { width: 100%; display: block; border: 4px solid var(--navy); }
+#hint { position: absolute; bottom: calc(100% + 12px); left: 0; right: 0; text-align: center; font-size: 10px; }
+#flash { position: absolute; inset: 0; background: #ff4d6d; opacity: 0; pointer-events: none; transition: opacity .25s; }
+#screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(205, 180, 219, 0.5); }
+#card { width: min(580px, 92vw); max-height: 94%; overflow-y: auto; background: var(--pink-l); border: 4px solid var(--navy); box-shadow: 8px 8px 0 var(--navy); padding: 24px 26px; }
+#card h1 { margin: 6px 0 22px; font-size: clamp(15px, 4.6vw, 26px); font-weight: 400; line-height: 1.3; text-transform: uppercase; }
+#card p { margin: 12px 0; font-size: 11px; line-height: 2; }
+#card .key { display: inline-block; min-width: 22px; padding: 3px 7px; margin: 0 3px; text-align: center; background: var(--blue-l); border: 3px solid var(--navy); box-shadow: 2px 2px 0 var(--navy); font-size: 11px; }
+#card table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+#card td { padding: 10px 0; border-bottom: 3px dashed var(--pink); font-size: 12px; }
+#card td:last-child { text-align: right; }
+#card tr.total td { color: #7b2cbf; font-size: 15px; border-bottom: none; padding-top: 14px; }
+#go { margin-top: 20px; animation: blink 1s steps(2, jump-none) infinite; }
+@keyframes blink { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { #go { animation: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="three"></canvas>
+  <div id="hud"><div id="hearts"></div><div id="hudr"><div id="walk" class="px">Street 0</div><button id="pausebtn" class="hbtn" type="button" aria-label="Pause"></button><button id="helpbtn" class="hbtn" type="button" aria-label="How to play">?</button></div></div>
+  <div id="phone"><div id="hint" class="outline">Up jumps, Down ducks</div><canvas id="pc" width="480" height="270"></canvas></div>
+  <div id="flash"></div>
+  <div id="screen"><div id="card"></div></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  var NAVY = '#3a2a5c';
+  var LANES = [-2.2, 0, 2.2];
+  var PED_H = 2.0;
+  var BLD_COLORS = ['#cdb4db', '#ffc8dd', '#ffafcc', '#bde0fe', '#a2d2ff'];
+  var $ = function (id) { return document.getElementById(id); };
+
+  var renderer = new THREE.WebGLRenderer({ canvas: $('three'), antialias: true });
+  var scene = new THREE.Scene();
+
+  var skyC = document.createElement('canvas');
+  skyC.width = 4; skyC.height = 256;
+  var sk = skyC.getContext('2d');
+  [[0, '#a2d2ff'], [0.30, '#bde0fe'], [0.42, '#cdb4db'], [0.48, '#ffc8dd'], [0.56, '#ffafcc']].forEach(function (b, i, arr) {
+    var y0 = Math.floor(b[0] * 256), y1 = i + 1 < arr.length ? Math.floor(arr[i + 1][0] * 256) : 256;
+    sk.fillStyle = b[1]; sk.fillRect(0, y0, 4, y1 - y0);
+  });
+  var skyTex = new THREE.CanvasTexture(skyC);
+  skyTex.magFilter = THREE.NearestFilter; skyTex.minFilter = THREE.NearestFilter;
+  scene.background = skyTex;
+  scene.fog = new THREE.Fog(0xffc8dd, 14, 58);
+
+  var camera = new THREE.PerspectiveCamera(72, 1, 0.1, 100);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xcdb4db, 1.0));
+  var sun = new THREE.DirectionalLight(0xfff4e6, 0.5);
+  sun.position.set(5, 10, 6);
+  scene.add(sun);
+
+  var bc = document.createElement('canvas');
+  bc.width = 128; bc.height = 128;
+  var bx = bc.getContext('2d');
+  bx.fillStyle = '#fff0f6'; bx.fillRect(0, 0, 128, 128);
+  var BRICK = ['#ffc8dd', '#ffafcc', '#cdb4db', '#f1b9d6'];
+  for (var r = 0; r < 8; r++) {
+    for (var c = -1; c < 5; c++) {
+      var ox = c * 32 + (r % 2) * 16;
+      bx.fillStyle = BRICK[(Math.random() * BRICK.length) | 0];
+      bx.fillRect(ox + 2, r * 16 + 2, 28, 12);
+      bx.fillStyle = 'rgba(255,255,255,0.35)';
+      bx.fillRect(ox + 2, r * 16 + 2, 28, 2);
+    }
+  }
+  var groundTex = new THREE.CanvasTexture(bc);
+  groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
+  groundTex.magFilter = THREE.NearestFilter;
+  groundTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  groundTex.repeat.set(10, 55);
+  var ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 220), new THREE.MeshLambertMaterial({ map: groundTex }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.z = -90;
+  scene.add(ground);
+
+  var dashes = [];
+  var dashGeo = new THREE.BoxGeometry(0.12, 0.02, 1.4);
+  var dashMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+  [-1.1, 1.1].forEach(function (x) {
+    for (var i = 0; i < 18; i++) {
+      var d = new THREE.Mesh(dashGeo, dashMat);
+      d.position.set(x, 0.03, -i * 4);
+      scene.add(d);
+      dashes.push(d);
+    }
+  });
+
+  function buildingTex(col) {
+    var cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 128;
+    var g = cv.getContext('2d');
+    g.fillStyle = col; g.fillRect(0, 0, 64, 128);
+    for (var j = 0; j < 6; j++) {
+      for (var i = 0; i < 4; i++) {
+        var lit = Math.random() < 0.3;
+        g.fillStyle = lit ? '#fff6c8' : 'rgba(255,255,255,0.7)';
+        g.fillRect(6 + i * 15, 8 + j * 20, 9, 11);
+        g.fillStyle = 'rgba(58,42,92,0.25)';
+        g.fillRect(6 + i * 15, 8 + j * 20 + 9, 9, 2);
+      }
+    }
+    var t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.magFilter = THREE.NearestFilter;
+    return t;
+  }
+  var bldTex = BLD_COLORS.map(buildingTex);
+
+  var buildings = [];
+  [-1, 1].forEach(function (side) {
+    for (var i = 0; i < 14; i++) {
+      var h = 6 + Math.random() * 10;
+      var t = bldTex[(Math.random() * bldTex.length) | 0].clone();
+      t.needsUpdate = true;
+      t.repeat.set(1, h / 12);
+      var b = new THREE.Mesh(new THREE.BoxGeometry(5, h, 5.2), new THREE.MeshLambertMaterial({ map: t }));
+      b.position.set(side * (7.5 + Math.random() * 1.2), h / 2, -i * 6);
+      scene.add(b);
+      buildings.push(b);
+    }
+  });
+
+  var sunDisc = new THREE.Mesh(new THREE.CircleGeometry(13, 24), new THREE.MeshBasicMaterial({ color: 0xffc8dd, fog: false }));
+  sunDisc.position.set(-20, 22, -92);
+  scene.add(sunDisc);
+  var sunCore = new THREE.Mesh(new THREE.CircleGeometry(8, 24), new THREE.MeshBasicMaterial({ color: 0xfff0c9, fog: false }));
+  sunCore.position.set(-20, 22, -91.5);
+  scene.add(sunCore);
+
+  var clouds = [];
+  var cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+  function makeCloud() {
+    var g = new THREE.Group();
+    [[0, 0, 10, 2.2], [-3, -0.6, 6, 1.6], [3.2, -0.4, 7, 1.8], [1, 1.5, 5, 1.8]].forEach(function (a) {
+      var m = new THREE.Mesh(new THREE.BoxGeometry(a[2], a[3], 1), cloudMat);
+      m.position.set(a[0], a[1], 0);
+      g.add(m);
+    });
+    return g;
+  }
+  for (var ci = 0; ci < 7; ci++) {
+    var cl = makeCloud();
+    cl.position.set(-50 + Math.random() * 100, 11 + Math.random() * 12, -72 - Math.random() * 10);
+    scene.add(cl);
+    clouds.push(cl);
+  }
+
+  function rep(c, n) { return new Array(n + 1).join(c); }
+  var SPRITE_BASE = [rep('.', 3) + rep('o', 6) + rep('.', 3), '..ohhhhhho..', '..ohhhhhho..', '..ohkkkkho..', '..okekkeko..', '..ockkkkco..', rep('.', 3) + rep('o', 6) + rep('.', 3), '..o' + rep('t', 6) + 'o..', '.o' + rep('t', 8) + 'o.', '.o' + rep('t', 8) + 'o.', '.o' + rep('t', 8) + 'o.', '.ok' + rep('t', 6) + 'ko.', '..o' + rep('p', 6) + 'o..', '..o' + rep('p', 6) + 'o..', '..oppooppo..', '..oppooppo..', '..oppooppo..', '..obboobbo..', '..oooooooo..'];
+  var SPRITE_KINDS = [
+    { p: { h: '#6b4a3a', k: '#ffd9c2', t: '#7b4fb5', p: '#4f7cff', b: '#ffffff', a: '#5d3b99' }, o: { 7: '..oaaaaaao..' } },
+    { p: { h: '#8a5a3b', k: '#f1c9a5', t: '#ffafcc', p: '#a2d2ff', b: '#ffffff', a: '#ffe08a' }, o: { 0: '....oooo....', 1: '...oaaaao...', 2: '.oaaaaaaaao.' } },
+    { p: { h: '#2b2540', k: '#c68e6a', t: '#3a4a7a', p: '#2b2540', b: '#7a6a9a', a: '#e63946' }, o: { 8: '.otttaattto.', 9: '.otttaattto.', 10: '.otttaattto.' } },
+    { p: { h: '#ff8fb8', k: '#ffd9c2', t: '#fff6f6', p: '#7b4fb5', b: '#ffffff', a: '#a2d2ff' }, o: { 1: '..oahhhhao..', 3: '.aahkkkkhaa.', 4: '.aakekkekaa.' } },
+    { p: { h: '#ffb703', k: '#e8b898', t: '#2fbf9f', p: '#b08968', b: '#ffffff', a: '#ff6b9d' }, o: { 8: '.ottattatto.', 9: '.ottattatto.', 10: '.ottattatto.' } },
+    { p: { h: '#7b4fb5', k: '#ffd9c2', t: '#cdb4db', p: '#cdb4db', b: '#ff8fb8', a: '#ff6b9d' }, o: { 1: '..ohhhhhaao.', 4: '..hkekkekh..', 5: '..hckkkkch..', 6: '..hooooooh..', 12: '.oppppppppo.', 13: '.oppppppppo.', 14: '..okkookko..', 15: '..okkookko..', 16: '..okkookko..' } }
+  ];
+  function spriteMaterial(kind) {
+    var rows = SPRITE_BASE.slice();
+    for (var k in kind.o) rows[k] = kind.o[k];
+    var pal = { o: NAVY, e: NAVY, c: '#ff9fb8' };
+    for (var q in kind.p) pal[q] = kind.p[q];
+    var cv = document.createElement('canvas');
+    cv.width = 12; cv.height = 19;
+    var g = cv.getContext('2d');
+    rows.forEach(function (r, y) {
+      for (var x = 0; x < 12; x++) {
+        var ch = r.charAt(x);
+        if (ch !== '.' && pal[ch]) { g.fillStyle = pal[ch]; g.fillRect(x, y, 1, 1); }
+      }
+    });
+    var t = new THREE.CanvasTexture(cv);
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.LinearFilter;
+    t.generateMipmaps = false;
+    return new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: 0.5 });
+  }
+  var PED_MATS = SPRITE_KINDS.map(spriteMaterial);
+  var PED_PLANE = new THREE.PlaneGeometry(PED_H * 12 / 19, PED_H);
+  var SHADOW_GEO = new THREE.CircleGeometry(0.55, 12);
+  var SHADOW_MAT = new THREE.MeshBasicMaterial({ color: 0x3a2a5c, transparent: true, opacity: 0.22, depthWrite: false });
+  var peds = [];
+
+  var pc = $('pc'), ctx = pc.getContext('2d');
+  var PW = pc.width, PH = pc.height, GROUND = 205, PX = 80, CELL = 4;
+  var FONT_PX = '"Press Start 2P", "Courier New", monospace';
+
+  var HEART = ['.XX...XX.', 'XXXX.XXXX', 'XXXXXXXXX', 'XXXXXXXXX', '.XXXXXXX.', '..XXXXX..', '...XXX...', '....X....'];
+  function heartCell(x, y) { return y >= 0 && y < HEART.length && x >= 0 && x < 9 && HEART[y].charAt(x) === 'X'; }
+  function heartSVG(on) {
+    var s = '<svg viewBox="-1 -1 11 10" aria-hidden="true">';
+    for (var y = -1; y <= HEART.length; y++) {
+      for (var x = -1; x <= 9; x++) {
+        var col = null;
+        if (heartCell(x, y)) {
+          col = on ? ((y === 1 && (x === 1 || x === 2)) ? '#ffb3c1' : '#ff4d6d') : '#cdb4db';
+        } else if (heartCell(x - 1, y) || heartCell(x + 1, y) || heartCell(x, y - 1) || heartCell(x, y + 1)) {
+          col = NAVY;
+        }
+        if (col) s += '<rect x="' + x + '" y="' + y + '" width="1.02" height="1.02" fill="' + col + '"/>';
+      }
+    }
+    return s + '</svg>';
+  }
+
+  var state = 'menu';
+  var keys = { up: false, down: false };
+  var lives, walkDist, walkSpeed, lane, camX, spawnT, streetInv, elapsed, shake;
+  var ph;
+  var best = 0;
+  try { best = parseInt(localStorage.getItem('dd_lite_best') || '0', 10) || 0; } catch (e) {}
+
+  function resetGame() {
+    peds.forEach(function (p) { scene.remove(p.mesh); });
+    peds = [];
+    lives = 3; walkDist = 0; walkSpeed = 7; lane = 1; camX = 0; spawnT = 1.5; streetInv = 0; elapsed = 0; shake = 0;
+    ph = { y: 0, vy: 0, onGround: true, ducking: false, obs: [], spawn: 1.2, time: 0, dist: 0, speed: 240, score: 0, inv: 0, flash: 0,
+      clouds: [{ x: 60, y: 46, w: 72 }, { x: 260, y: 92, w: 92 }, { x: 410, y: 36, w: 64 }] };
+    updateHearts();
+    updateWalkHud();
+  }
+
+  function updateHearts() {
+    var s = '';
+    for (var i = 0; i < 3; i++) s += heartSVG(i < lives);
+    $('hearts').innerHTML = s;
+  }
+  function walkScore() { return Math.floor(walkDist); }
+  function updateWalkHud() { $('walk').textContent = 'Street ' + walkScore(); }
+
+  function loseLife(source) {
+    lives--;
+    updateHearts();
+    var f = $('flash');
+    f.style.transition = 'none';
+    f.style.opacity = '0.4';
+    requestAnimationFrame(function () { requestAnimationFrame(function () { f.style.transition = 'opacity .35s'; f.style.opacity = '0'; }); });
+    if (source === 'street') shake = 0.3;
+    if (lives <= 0) endGame();
+  }
+
+  var helpPrev = null, screenHtml = '';
+  var PAUSE_SVG = '<svg viewBox="0 0 8 8" width="20" height="20" style="shape-rendering:crispEdges" aria-hidden="true"><rect x="1" y="1" width="2" height="6" fill="#3a2a5c"/><rect x="5" y="1" width="2" height="6" fill="#3a2a5c"/></svg>';
+  var PLAY_SVG = '<svg viewBox="0 0 8 8" width="20" height="20" style="shape-rendering:crispEdges" aria-hidden="true"><rect x="1" y="1" width="2" height="6" fill="#3a2a5c"/><rect x="3" y="2" width="2" height="4" fill="#3a2a5c"/><rect x="5" y="3" width="2" height="2" fill="#3a2a5c"/></svg>';
+  function syncButtons() {
+    var pb = $('pausebtn');
+    var paused = state === 'paused';
+    pb.innerHTML = paused ? PLAY_SVG : PAUSE_SVG;
+    pb.disabled = !(state === 'playing' || state === 'paused');
+    pb.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
+  }
+  function showScreen(html) { screenHtml = html; $('card').innerHTML = html; $('screen').style.display = 'flex'; syncButtons(); }
+  function hideScreen() { $('screen').style.display = 'none'; syncButtons(); }
+  function helpHtml() { return menuHtml().replace('Dizzy Dreams', 'How to play').replace(/<p id="go">[\s\S]*$/, '<p id="go">Press Enter to go back</p>'); }
+  function openHelp() {
+    if (helpPrev !== null) { closeHelp(); return; }
+    if (state === 'playing') pauseGame();
+    helpPrev = screenHtml;
+    showScreen(helpHtml());
+  }
+  function closeHelp() { var h = helpPrev; helpPrev = null; if (h !== null) showScreen(h); }
+  $('pausebtn').addEventListener('click', function (e) {
+    e.currentTarget.blur();
+    if (helpPrev !== null) { closeHelp(); return; }
+    if (state === 'playing') pauseGame();
+    else if (state === 'paused') resumeGame();
+  });
+  $('helpbtn').addEventListener('click', function (e) { e.currentTarget.blur(); openHelp(); });
+
+  function scoreTable() {
+    var street = walkScore(), phone = Math.floor(ph.score), total = street + phone;
+    return '<table><tr><td>Street score</td><td>' + street + '</td></tr><tr><td>Phone score</td><td>' + phone + '</td></tr><tr class="total"><td>Total</td><td>' + total + '</td></tr></table>';
+  }
+  function menuHtml() {
+    return '<h1 class="outline">Dizzy Dreams</h1>' +
+      '<p>You are strolling down a dreamy street while playing a game on your phone. Keep both worlds going!</p>' +
+      '<p><span class="key">A</span> and <span class="key">D</span> switch lanes to avoid pedestrians.</p>' +
+      '<p><span class="key">\u2191</span> and <span class="key">\u2193</span> to dodge squares on your phone.</p>' +
+      '<p>You share three hearts between both worlds. Every collision costs one heart, whether it\u2019s a pedestrian or a square.</p>' +
+      '<p>Your street score and phone score combine into one total. Keep both going and see how high you can score!</p>' +
+      '<p><span class="key">P</span> pauses.</p>' +
+      '<p id="go">Press Enter to start' + (best ? '<br>Best Score: ' + best : '') + '</p>';
+  }
+
+  function startGame() { resetGame(); state = 'playing'; hideScreen(); }
+  function pauseGame() { state = 'paused'; showScreen('<h1 class="outline">Paused</h1>' + scoreTable() + '<p id="go">Press P or Enter to resume</p>'); }
+  function resumeGame() { state = 'playing'; hideScreen(); }
+  function endGame() {
+    state = 'over';
+    var total = walkScore() + Math.floor(ph.score);
+    var isBest = total > best;
+    if (isBest) { best = total; try { localStorage.setItem('dd_lite_best', String(best)); } catch (e) {} }
+    showScreen('<h1 class="outline">Game over</h1>' + scoreTable() + '<p>' + (isBest ? 'New Best Score!' : 'Best Score: ' + best) + '</p><p id="go">Press Enter to play again</p>');
+  }
+
+  window.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight' || k === ' ') e.preventDefault();
+    if (k === 'ArrowUp') keys.up = true;
+    if (k === 'ArrowDown') keys.down = true;
+    if (helpPrev !== null) {
+      if (!e.repeat && (k === 'Enter' || k === ' ' || k === 'Escape')) closeHelp();
+      return;
+    }
+    if (e.repeat) return;
+    var lower = k.length === 1 ? k.toLowerCase() : k;
+    if (state === 'playing') {
+      if (lower === 'a') lane = Math.max(0, lane - 1);
+      else if (lower === 'd') lane = Math.min(2, lane + 1);
+      else if (lower === 'p' || k === 'Escape') pauseGame();
+    } else if (state === 'paused') {
+      if (lower === 'p' || k === 'Escape' || k === 'Enter' || k === ' ') resumeGame();
+    } else if (k === 'Enter' || k === ' ') {
+      startGame();
+    }
+  });
+  window.addEventListener('keyup', function (e) {
+    if (e.key === 'ArrowUp') keys.up = false;
+    if (e.key === 'ArrowDown') keys.down = false;
+  });
+  window.addEventListener('blur', function () { keys.up = false; keys.down = false; if (state === 'playing') pauseGame(); });
+
+  function updatePhone(dt) {
+    var p = ph;
+    p.time += dt;
+    p.speed = 240 + Math.min(280, p.time * 6);
+    p.dist += p.speed * dt;
+    p.ducking = keys.down && p.onGround;
+    if (keys.up && p.onGround) { p.vy = -560; p.onGround = false; }
+    if (!p.onGround) {
+      p.vy += (keys.down ? 3400 : 1700) * dt;
+      p.y += p.vy * dt;
+      if (p.y >= 0) { p.y = 0; p.vy = 0; p.onGround = true; }
+    }
+    p.clouds.forEach(function (c) { c.x -= p.speed * 0.08 * dt; if (c.x + c.w < 0) { c.x = PW + 20; c.y = 30 + Math.random() * 80; } });
+    p.spawn -= dt;
+    if (p.spawn <= 0) {
+      var air = p.time > 8 && Math.random() < 0.38;
+      p.obs.push({ x: PW + 30, w: 28, h: air ? 26 : 30, b: air ? 30 : 0, passed: false });
+      var gap = p.speed * 0.75 + 70 + Math.random() * 170;
+      p.spawn = gap / p.speed;
+    }
+    if (p.inv > 0) p.inv -= dt;
+    if (p.flash > 0) p.flash -= dt;
+    var hh = p.ducking ? 22 : 40;
+    var pBottom = -p.y, pTop = pBottom + hh;
+    for (var i = p.obs.length - 1; i >= 0; i--) {
+      var o = p.obs[i];
+      o.x -= p.speed * dt;
+      if (o.x + o.w < -10) { p.obs.splice(i, 1); continue; }
+      if (!o.passed && o.x + o.w < PX - 18) { o.passed = true; p.score += 25; }
+      if (p.inv <= 0) {
+        var xOver = Math.abs((o.x + o.w / 2) - PX) < 15 + o.w / 2 - 3;
+        var yOver = pBottom < o.b + o.h - 3 && pTop > o.b + 3;
+        if (xOver && yOver) {
+          p.inv = 1.3;
+          p.flash = 0.3;
+          p.obs = p.obs.filter(function (q) { return q.x > PX + 140; });
+          loseLife('phone');
+          break;
+        }
+      }
+    }
+    p.score += dt * 15;
+  }
+
+  function pixEllipse(cx, cy, rx, ry, col) {
+    ctx.fillStyle = col;
+    var ocx = Math.round(cx / CELL) * CELL, ocy = Math.round(cy / CELL) * CELL;
+    for (var y = -ry; y < ry; y += CELL) {
+      for (var x = -rx; x < rx; x += CELL) {
+        var nx = (x + CELL / 2) / rx, ny = (y + CELL / 2) / ry;
+        if (nx * nx + ny * ny <= 1) ctx.fillRect(ocx + x, ocy + y, CELL, CELL);
+      }
+    }
+  }
+
+  function drawPhone() {
+    var p = ph;
+    ctx.fillStyle = p.flash > 0 ? '#ffd1dc' : '#bde0fe';
+    ctx.fillRect(0, 0, PW, PH);
+    ctx.fillStyle = '#ffffff';
+    p.clouds.forEach(function (c) {
+      var x = Math.round(c.x / CELL) * CELL, y = Math.round(c.y / CELL) * CELL;
+      ctx.fillRect(x, y, c.w, 12);
+      ctx.fillRect(x + 12, y - 8, c.w - 28, 8);
+    });
+    ctx.fillStyle = '#cdb4db';
+    ctx.fillRect(0, GROUND, PW, PH - GROUND);
+    ctx.fillStyle = NAVY;
+    ctx.fillRect(0, GROUND, PW, 4);
+    ctx.fillStyle = '#b494d1';
+    for (var x = -(p.dist % 56); x < PW; x += 56) { ctx.fillRect(x, GROUND + 22, 24, 4); ctx.fillRect(x + 28, GROUND + 44, 16, 4); }
+    p.obs.forEach(function (o) {
+      var y = GROUND - o.b - o.h;
+      ctx.fillStyle = NAVY;
+      ctx.fillRect(o.x - 4, y - 4, o.w + 8, o.h + 8);
+      ctx.fillStyle = '#8e5fc9';
+      ctx.fillRect(o.x, y, o.w, o.h);
+      ctx.fillStyle = '#b48ae6';
+      ctx.fillRect(o.x, y, o.w, 4);
+    });
+    if (p.inv <= 0 || Math.floor(p.inv * 12) % 2 === 0) {
+      if (p.ducking) {
+        pixEllipse(PX, GROUND - 11, 28, 15, NAVY);
+        pixEllipse(PX, GROUND - 11, 24, 11, '#ffafcc');
+        ctx.fillStyle = NAVY; ctx.fillRect(PX + 8, GROUND - 16, 4, 4);
+      } else {
+        pixEllipse(PX, GROUND - 20 + p.y, 24, 24, NAVY);
+        pixEllipse(PX, GROUND - 20 + p.y, 20, 20, '#ffafcc');
+        ctx.fillStyle = '#ffc8dd'; ctx.fillRect(PX - 12, GROUND - 32 + p.y, 8, 4);
+        ctx.fillStyle = NAVY; ctx.fillRect(PX + 8, GROUND - 28 + p.y, 4, 8);
+      }
+    }
+    ctx.font = '16px ' + FONT_PX;
+    ctx.textAlign = 'right';
+    var label = 'PHONE ' + Math.floor(p.score);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(label, PW - 12, 34);
+    ctx.fillStyle = NAVY;
+    ctx.fillText(label, PW - 14, 32);
+    ctx.textAlign = 'left';
+  }
+
+  function spawnRow() {
+    var count = Math.random() < Math.min(0.5, 0.1 + elapsed * 0.01) ? 2 : 1;
+    var avail = [0, 1, 2];
+    for (var i = 0; i < count; i++) {
+      var li = avail.splice((Math.random() * avail.length) | 0, 1)[0];
+      var m = new THREE.Group();
+      var spr = new THREE.Mesh(PED_PLANE, PED_MATS[(Math.random() * PED_MATS.length) | 0]);
+      spr.position.y = PED_H / 2;
+      var sh = new THREE.Mesh(SHADOW_GEO, SHADOW_MAT);
+      sh.rotation.x = -Math.PI / 2;
+      sh.position.y = 0.04;
+      m.add(spr);
+      m.add(sh);
+      m.position.set(LANES[li], 0, -55);
+      scene.add(m);
+      peds.push({ mesh: m, spr: spr, v: 1.5 + Math.random() * 2, seed: Math.random() * 6 });
+    }
+  }
+
+  function updateStreet(dt) {
+    elapsed += dt;
+    walkSpeed = Math.min(16, 7 + elapsed * 0.08);
+    walkDist += walkSpeed * dt;
+    camX += (LANES[lane] - camX) * Math.min(1, dt * 11);
+    if (streetInv > 0) streetInv -= dt;
+    spawnT -= dt;
+    if (spawnT <= 0) {
+      spawnRow();
+      spawnT = Math.max(0.75, 1.7 - elapsed * 0.012) * (0.8 + Math.random() * 0.5);
+    }
+    for (var i = peds.length - 1; i >= 0; i--) {
+      var p = peds[i];
+      p.mesh.position.z += (walkSpeed + p.v) * dt;
+      p.mesh.rotation.z = Math.sin(elapsed * 6 + p.seed) * 0.05;
+      p.spr.position.y = PED_H / 2 + Math.abs(Math.sin(elapsed * 7 + p.seed)) * 0.1;
+      var z = p.mesh.position.z;
+      if (z > 2.5) { scene.remove(p.mesh); peds.splice(i, 1); continue; }
+      if (streetInv <= 0 && z > -0.8 && z < 0.8 && Math.abs(p.mesh.position.x - camX) < 1.0) {
+        streetInv = 1.5;
+        scene.remove(p.mesh);
+        peds.splice(i, 1);
+        loseLife('street');
+        if (state !== 'playing') return;
+      }
+    }
+    groundTex.offset.y = (walkDist / 4) % 1;
+    dashes.forEach(function (d) { d.position.z += walkSpeed * dt; if (d.position.z > 3) d.position.z -= 72; });
+    buildings.forEach(function (b) { b.position.z += walkSpeed * dt; if (b.position.z > 8) b.position.z -= 84; });
+    updateWalkHud();
+  }
+
+  function updateCamera(dt) {
+    var bob = state === 'playing' ? Math.sin(walkDist * 2.3) * 0.06 : 0;
+    var sx = 0, sy = 0;
+    if (shake > 0) { shake -= dt; sx = (Math.random() - 0.5) * 0.25; sy = (Math.random() - 0.5) * 0.15; }
+    camera.position.set(camX + sx, 1.65 + bob + sy, 0);
+    camera.lookAt(camX * 0.6, 1.2, -10);
+    camera.rotation.z = (LANES[lane] - camX) * -0.03;
+  }
+
+  function drift(dt) {
+    clouds.forEach(function (c) { c.position.x += 0.9 * dt; if (c.position.x > 58) c.position.x = -58; });
+  }
+
+  function resize() {
+    var w = window.innerWidth, h = window.innerHeight;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  resetGame();
+  showScreen(menuHtml());
+  if (document.fonts && document.fonts.load) document.fonts.load('16px "Press Start 2P"');
+
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (state === 'playing') {
+      updateStreet(dt);
+      if (state === 'playing') updatePhone(dt);
+    }
+    drift(dt);
+    updateCamera(dt);
+    drawPhone();
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
