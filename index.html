@@ -235,7 +235,7 @@ body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); col
 
   var state = 'menu';
   var keys = { up: false, down: false };
-  var lives, walkDist, walkSpeed, lane, camX, spawnT, streetInv, elapsed, shake;
+  var lives, walkDist, streetScore, walkSpeed, lane, camX, spawnT, streetInv, elapsed, shake;
   var ph;
   var best = 0;
   try { best = parseInt(localStorage.getItem('dd_lite_best') || '0', 10) || 0; } catch (e) {}
@@ -243,7 +243,7 @@ body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); col
   function resetGame() {
     peds.forEach(function (p) { scene.remove(p.mesh); });
     peds = [];
-    lives = 3; walkDist = 0; walkSpeed = 7; lane = 1; camX = 0; spawnT = 1.5; streetInv = 0; elapsed = 0; shake = 0;
+    lives = 3; walkDist = 0; streetScore = 0; walkSpeed = 7; lane = 1; camX = 0; spawnT = 1.5; streetInv = 0; elapsed = 0; shake = 0;
     ph = { y: 0, vy: 0, onGround: true, ducking: false, obs: [], spawn: 1.2, time: 0, dist: 0, speed: 240, score: 0, inv: 0, flash: 0,
       clouds: [{ x: 60, y: 46, w: 72 }, { x: 260, y: 92, w: 92 }, { x: 410, y: 36, w: 64 }] };
     updateHearts();
@@ -255,7 +255,7 @@ body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); col
     for (var i = 0; i < 3; i++) s += heartSVG(i < lives);
     $('hearts').innerHTML = s;
   }
-  function walkScore() { return Math.floor(walkDist); }
+  function walkScore() { return Math.floor(streetScore); }
   function updateWalkHud() { $('walk').textContent = 'Street ' + walkScore(); }
 
   function loseLife(source) {
@@ -366,9 +366,12 @@ body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); col
     p.spawn -= dt;
     if (p.spawn <= 0) {
       var air = p.time > 8 && Math.random() < 0.38;
-      p.obs.push({ x: PW + 30, w: 28, h: air ? 26 : 30, b: air ? 30 : 0, passed: false });
+      var ow = air ? 36 + ((Math.random() * 37) | 0) * 4 : 28;
+      var ob = air ? [24, 27, 30, 33][(Math.random() * 4) | 0] : 0;
+      var oh = air ? GROUND - ob : [24, 32, 40, 52][(Math.random() * 4) | 0];
+      p.obs.push({ x: PW + 30, w: ow, h: oh, b: ob, passed: false });
       var gap = p.speed * 0.75 + 70 + Math.random() * 170;
-      p.spawn = gap / p.speed;
+      p.spawn = (gap + (air ? ow : 0)) / p.speed;
     }
     if (p.inv > 0) p.inv -= dt;
     if (p.flash > 0) p.flash -= dt;
@@ -378,7 +381,7 @@ body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); col
       var o = p.obs[i];
       o.x -= p.speed * dt;
       if (o.x + o.w < -10) { p.obs.splice(i, 1); continue; }
-      if (!o.passed && o.x + o.w < PX - 18) { o.passed = true; p.score += 25; }
+      if (!o.passed && o.x + o.w < PX - 18) { o.passed = true; p.score += 10; }
       if (p.inv <= 0) {
         var xOver = Math.abs((o.x + o.w / 2) - PX) < 15 + o.w / 2 - 3;
         var yOver = pBottom < o.b + o.h - 3 && pTop > o.b + 3;
@@ -391,7 +394,7 @@ body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); col
         }
       }
     }
-    p.score += dt * 15;
+    p.score += dt * 10;
   }
 
   function pixEllipse(cx, cy, rx, ry, col) {
@@ -428,7 +431,7 @@ body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); col
       ctx.fillStyle = '#8e5fc9';
       ctx.fillRect(o.x, y, o.w, o.h);
       ctx.fillStyle = '#b48ae6';
-      ctx.fillRect(o.x, y, o.w, 4);
+      ctx.fillRect(o.x, o.b > 0 ? y + o.h - 4 : y, o.w, 4);
     });
     if (p.inv <= 0 || Math.floor(p.inv * 12) % 2 === 0) {
       if (p.ducking) {
@@ -475,6 +478,7 @@ body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); col
     elapsed += dt;
     walkSpeed = Math.min(16, 7 + elapsed * 0.08);
     walkDist += walkSpeed * dt;
+    streetScore += dt * 10;
     camX += (LANES[lane] - camX) * Math.min(1, dt * 11);
     if (streetInv > 0) streetInv -= dt;
     spawnT -= dt;
@@ -488,6 +492,8 @@ body { margin: 0; height: 100%; overflow: hidden; background: var(--pink-l); col
       p.mesh.rotation.z = Math.sin(elapsed * 6 + p.seed) * 0.05;
       p.spr.position.y = PED_H / 2 + Math.abs(Math.sin(elapsed * 7 + p.seed)) * 0.1;
       var z = p.mesh.position.z;
+      if (z > -8 && z < -1 && Math.abs(p.mesh.position.x - camX) < 1.2) p.threat = true;
+      if (!p.passed && z > 0.8) { p.passed = true; if (p.threat) streetScore += 10; }
       if (z > 2.5) { scene.remove(p.mesh); peds.splice(i, 1); continue; }
       if (streetInv <= 0 && z > -0.8 && z < 0.8 && Math.abs(p.mesh.position.x - camX) < 1.0) {
         streetInv = 1.5;
